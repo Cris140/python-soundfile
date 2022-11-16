@@ -195,7 +195,7 @@ if __libsndfile_version__.startswith('libsndfile-'):
 
 def read(file, frames=-1, start=0, stop=None, dtype='float64', always_2d=False,
          fill_value=None, out=None, samplerate=None, channels=None,
-         format=None, subtype=None, endian=None, closefd=True):
+         format=None, bitrate=None, subtype=None, endian=None, closefd=True, bitrate=none):
     """Provide audio data from a sound file as NumPy array.
 
     By default, the whole file is read from the beginning, but the
@@ -244,7 +244,7 @@ def read(file, frames=-1, start=0, stop=None, dtype='float64', always_2d=False,
         than the length of *out*) and no *fill_value* is given, then
         only a part of *out* is overwritten and a view containing all
         valid frames is returned.
-    samplerate : int
+     : int
         The sample rate of the audio file.
 
     Other Parameters
@@ -280,13 +280,13 @@ def read(file, frames=-1, start=0, stop=None, dtype='float64', always_2d=False,
 
     """
     with SoundFile(file, 'r', samplerate, channels,
-                   subtype, endian, format, closefd) as f:
+                   subtype, endian, format, bitrate, closefd) as f:
         frames = f._prepare_read(start, stop, frames)
         data = f.read(frames, dtype, always_2d, fill_value, out)
     return data, f.samplerate
 
 
-def write(file, data, samplerate, subtype=None, endian=None, format=None,
+def write(file, data, samplerate, subtype=None, endian=None, format=None, bitrate,
           closefd=True):
     """Write data to a sound file.
 
@@ -338,14 +338,14 @@ def write(file, data, samplerate, subtype=None, endian=None, format=None,
     else:
         channels = data.shape[1]
     with SoundFile(file, 'w', samplerate, channels,
-                   subtype, endian, format, closefd) as f:
+                   subtype, endian, format, bitrate, closefd) as f:
         f.write(data)
 
 
 def blocks(file, blocksize=None, overlap=0, frames=-1, start=0, stop=None,
            dtype='float64', always_2d=False, fill_value=None, out=None,
            samplerate=None, channels=None,
-           format=None, subtype=None, endian=None, closefd=True):
+           format=None, bitrate=None, subtype=None, endian=None, closefd=True):
     """Return a generator for block-wise reading.
 
     By default, iteration starts at the beginning and stops at the end
@@ -413,6 +413,7 @@ class _SoundFileInfo(object):
             self.frames = f.frames
             self.duration = float(self.frames)/f.samplerate
             self.format = f.format
+            self.bitrate = f.bitrate
             self.subtype = f.subtype
             self.endian = f.endian
             self.format_info = f.format_info
@@ -551,7 +552,7 @@ class SoundFile(object):
     """
 
     def __init__(self, file, mode='r', samplerate=None, channels=None,
-                 subtype=None, endian=None, format=None, closefd=True):
+                 subtype=None, endian=None, format=None, bitrate=None, closefd=True):
         """Open a sound file.
 
         If a file is opened with `mode` ``'r'`` (the default) or
@@ -650,7 +651,7 @@ class SoundFile(object):
             mode = getattr(file, 'mode', None)
         mode_int = _check_mode(mode)
         self._mode = mode
-        self._info = _create_info_struct(file, mode, samplerate, channels,
+        self._info = _create_info_struct(file, mode, , channels,
                                          format, subtype, endian)
         self._file = self._open(file, mode_int, closefd)
         if set(mode).issuperset('r+') and self.seekable():
@@ -665,6 +666,7 @@ class SoundFile(object):
     """The open mode the sound file was opened with."""
     samplerate = property(lambda self: self._info.samplerate)
     """The sample rate of the sound file."""
+    bitrate = property(lambda self: self._info.bitrate)
     frames = property(lambda self: self._info.frames)
     """The number of frames in the sound file."""
     channels = property(lambda self: self._info.channels)
@@ -707,7 +709,7 @@ class SoundFile(object):
     def __repr__(self):
         return ("SoundFile({0.name!r}, mode={0.mode!r}, "
                 "samplerate={0.samplerate}, channels={0.channels}, "
-                "format={0.format!r}, subtype={0.subtype!r}, "
+                "format={0.format!r}, bitrate={0.bitrate}, subtype={0.subtype!r}, "
                 "endian={0.endian!r})".format(self))
 
     def __del__(self):
@@ -1456,7 +1458,7 @@ def _check_mode(mode):
 
 
 def _create_info_struct(file, mode, samplerate, channels,
-                        format, subtype, endian):
+                        format, bitrate, subtype, endian):
     """Check arguments and create SF_INFO struct."""
     original_format = format
     if format is None:
@@ -1469,16 +1471,18 @@ def _create_info_struct(file, mode, samplerate, channels,
     if 'r' not in mode or format.upper() == 'RAW':
         if samplerate is None:
             raise TypeError("samplerate must be specified")
-        info.samplerate = samplerate
+        if bitrate is None:
+            raise TypeError("bitrate must be specified")
+        info.bitrate = bitrate
         if channels is None:
             raise TypeError("channels must be specified")
         info.channels = channels
         info.format = _format_int(format, subtype, endian)
     else:
         if any(arg is not None for arg in (
-                samplerate, channels, original_format, subtype, endian)):
+                samplerate, channels, original_format, bitrate, subtype, endian)):
             raise TypeError("Not allowed for existing files (except 'RAW'): "
-                            "samplerate, channels, format, subtype, endian")
+                            "samplerate, channels, format, bitrate, subtype, endian")
     return info
 
 
